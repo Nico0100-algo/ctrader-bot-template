@@ -83,6 +83,10 @@ namespace cAlgo.Robots
             // Bar-close driven. OnTick is used only for trailing, never for entries.
             Bars.BarOpened += OnBarOpened;
 
+            // Exits are logged from the platform's own close event, so stop-outs and
+            // target hits appear in the log alongside entries.
+            Positions.Closed += OnPositionClosed;
+
             // Recovery timer: re-attempts protective stops that were rejected at fill time.
             Timer.Start(TimeSpan.FromSeconds(RetrySeconds));
 
@@ -93,8 +97,28 @@ namespace cAlgo.Robots
         protected override void OnStop()
         {
             Bars.BarOpened -= OnBarOpened;
+            Positions.Closed -= OnPositionClosed;
             Timer.Stop();
             Print("STOPPED | {0} | open positions left untouched", BotLabel);
+        }
+
+        /// <summary>
+        /// Logs every exit with its reason. Without this, the log shows entries
+        /// but no closes, and a trade cannot be reconstructed from it.
+        /// </summary>
+        private void OnPositionClosed(PositionClosedEventArgs args)
+        {
+            var position = args.Position;
+
+            if (position.Label != BotLabel || position.SymbolName != SymbolName)
+                return;
+
+            _awaitingProtection = false;
+
+            Print("EXIT | id {0} | {1} | reason {2} | entry {3:F5} | {4:F1} pips | net {5:F2} | balance {6:F2}",
+                  position.Id, position.TradeType, args.Reason,
+                  position.EntryPrice, position.Pips,
+                  position.NetProfit, Account.Balance);
         }
 
         /// <summary>
@@ -315,11 +339,15 @@ namespace cAlgo.Robots
 
             if (!shouldMove) return;
 
+            // Capture before modifying — the Position object updates in place,
+            // so reading StopLoss after the call returns the new value, not the old.
+            double previousStop = position.StopLoss.Value;
+
             var result = ModifyPosition(position, candidate, position.TakeProfit, ProtectionType.Absolute);
 
             if (result.IsSuccessful)
                 Print("TRAIL | id {0} | SL {1:F5} -> {2:F5}",
-                      position.Id, position.StopLoss.Value, candidate);
+                      position.Id, previousStop, candidate);
             else
                 Print("TRAIL FAILED | id {0} | {1}", position.Id, result.Error);
         }
