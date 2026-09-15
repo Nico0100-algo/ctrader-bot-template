@@ -67,6 +67,7 @@ No spread filter — worth adding for lower-timeframe work
 Trailing stop moves on bar close only, not intrabar
 Pip-value sizing assumes the symbol reports `PipValue` correctly; verify on exotic instruments
 Not tested against every broker's stop-level restrictions
+The retry path for rejected stop attachment did not fire during testing — the Strategy Tester does not simulate broker rejections, so that branch is unproven in practice.
 ---
 Licence
 MIT. Use it, modify it, ship it.
